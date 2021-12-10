@@ -7,7 +7,11 @@ module crcdriver(
   output wire done,
   output wire [15:0] crc,
   input wire [7:0] seed,
-  input wire [7:0] length
+  input wire [7:0] length,
+  //output reg [7:0] counter
+  output wire [7:0] counter,
+  output reg [7:0] compcycles,
+  output reg [7:0] randctr
   );
 
   wire crc_en, init;
@@ -26,8 +30,9 @@ module crcdriver(
 
   reg [2:0] state;
   parameter S_IDLE = 0;
-  parameter S_COMPUTE = 1;
-  parameter S_DONE = 2;
+  parameter S_INIT = 1;
+  parameter S_COMPUTE = 2;
+  parameter S_DONE = 3;
   always@(posedge clk)
     if (!nrst)
       state <= S_IDLE;
@@ -35,9 +40,11 @@ module crcdriver(
       case(state)
         S_IDLE:
           if (en)
-            state <= S_COMPUTE;
+            state <= S_INIT;
           else
             state <= S_IDLE;
+        S_INIT:
+          state <= S_COMPUTE;
         S_COMPUTE:
           if (byte_ctr == length[4:0])
             state <= S_DONE;
@@ -52,7 +59,7 @@ module crcdriver(
           state <= S_IDLE;
       endcase
 
-  assign init = (state == S_IDLE)? 1'b1 : 0;
+  assign init = (state == S_INIT)? 1'b1 : 0;
   assign crc_en = (state == S_COMPUTE)? 1'b1 : 0;
   assign done = (state == S_DONE)? 1'b1 : 0;
   assign addr = byte_ctr[4:2];
@@ -69,9 +76,46 @@ module crcdriver(
     if (!nrst)
       byte_ctr <= 0;
     else
-      if (state == S_COMPUTE)
+      /*if (state == S_COMPUTE)
         byte_ctr <= byte_ctr + 1;
       else
-        byte_ctr <= 0;
+        byte_ctr <= 0;*/
+      case(state)
+        S_IDLE:
+          byte_ctr <= 0;
+        S_COMPUTE:
+          byte_ctr <= byte_ctr + 1;
+        default:
+          byte_ctr <= byte_ctr;
+      endcase
+  assign counter = {3'd0,byte_ctr};
+        
+  /*always@(posedge clk)
+    if (!nrst)
+      counter <= 0;
+    else
+      case(state)
+        S_IDLE:
+          counter <= 0;
+        S_COMPUTE:
+          counter <= counter + 1;
+        default:
+          counter <= counter;
+      endcase*/
+      
+  always@(posedge clk)
+    if (!nrst)
+      compcycles <= 0;
+    else
+      if (state == S_COMPUTE)
+        compcycles <= compcycles + 1;
+      else
+        compcycles <= compcycles;
+        
+  always@(posedge clk)
+    if (!nrst)
+      randctr <= 0;
+    else
+      randctr <= randctr + 1;
 
 endmodule

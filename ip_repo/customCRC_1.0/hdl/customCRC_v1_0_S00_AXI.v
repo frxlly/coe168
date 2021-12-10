@@ -478,6 +478,7 @@
     wire en, done;
     wire [7:0] seed, length;
     wire [15:0] crc;
+    wire [7:0] counter, compcycles, randctr;
     assign en = slv_reg0[0];
     assign length = slv_reg0[23:16];
     assign seed = slv_reg0[15:8];
@@ -492,8 +493,10 @@
 	begin
 	      // Address decoding for reading registers
 	      case ( axi_araddr[ADDR_LSB+OPT_MEM_ADDR_BITS:ADDR_LSB] )
-	        4'h0   : reg_data_out <= {slv_reg0[31:2], done, slv_reg0[0]};
-	        4'h1   : reg_data_out <= {slv_reg1[31:16], crc};
+	        //4'h0   : reg_data_out <= {slv_reg0[31:2], done, slv_reg0[0]};
+            4'h0   : reg_data_out <= {counter, slv_reg0[23:2], done, slv_reg0[0]};
+	        //4'h1   : reg_data_out <= {slv_reg1[31:16], crc};
+            4'h1   : reg_data_out <= {compcycles, randctr, crc};
 	        4'h2   : reg_data_out <= slv_reg2;
 	        4'h3   : reg_data_out <= slv_reg3;
 	        4'h4   : reg_data_out <= slv_reg4;
@@ -555,7 +558,10 @@
 	   .done(done),
 	   .crc(crc),
 	   .seed(seed),
-	   .length(length)
+	   .length(length),
+	   .counter(counter),
+	   .compcycles(compcycles),
+	   .randctr(randctr)
 	);
 
 	// User logic ends

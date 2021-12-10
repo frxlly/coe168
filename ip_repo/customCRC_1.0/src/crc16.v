@@ -12,10 +12,10 @@ module crc16(
 
 always @(posedge clk)
   if(!nrst)
-    crc <= seed;
+    crc <= {8'd0,seed};
   else
     if (init)
-      crc <= seed;
+      crc <= {8'd0,seed};
     else 
       if (en) begin
         crc[0] <= data[4] ^ data[0] ^ crc[8] ^ crc[12];
