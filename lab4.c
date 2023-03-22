@@ -1,13 +1,59 @@
+/******************************************************************************
+*
+* Copyright (C) 2009 - 2014 Xilinx, Inc.  All rights reserved.
+*
+* Permission is hereby granted, free of charge, to any person obtaining a copy
+* of this software and associated documentation files (the "Software"), to deal
+* in the Software without restriction, including without limitation the rights
+* to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+* copies of the Software, and to permit persons to whom the Software is
+* furnished to do so, subject to the following conditions:
+*
+* The above copyright notice and this permission notice shall be included in
+* all copies or substantial portions of the Software.
+*
+* Use of the Software is limited solely to applications:
+* (a) running on a Xilinx device, or
+* (b) that interact with a Xilinx device through a bus or interconnect.
+*
+* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+* IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+* FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
+* XILINX  BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+* WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF
+* OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+* SOFTWARE.
+*
+* Except as contained in this notice, the name of the Xilinx shall not be used
+* in advertising or otherwise to promote the sale, use or other dealings in
+* this Software without prior written authorization from Xilinx.
+*
+******************************************************************************/
+
+/*
+ * helloworld.c: simple test application
+ *
+ * This application configures UART 16550 to baud rate 9600.
+ * PS7 UART (Zynq) is not initialized by this application, since
+ * bootrom/bsp configures it to baud rate 115200
+ *
+ * ------------------------------------------------
+ * | UART TYPE   BAUD RATE                        |
+ * ------------------------------------------------
+ *   uartns550   9600
+ *   uartlite    Configurable only in HW design
+ *   ps7_uart    115200 (configured by bootrom/bsp)
+ */
+
 // Default
 #include <stdio.h>
 #include "platform.h"
 #include "xil_printf.h"
-
-#include "xparameters.h"
 #include "xil_io.h"
 
 // for UART drivers
 #include "xil_types.h"
+#include "xparameters.h"
 #include "xuartlite.h"
 
 // UART Buffer size and declared instance for UART Lite Peripheral
@@ -26,6 +72,7 @@ XUartLite UartLiteInst;
 int main(){
     init_platform();
 
+
     /* UART initialization */
     int Status;
     Status = XUartLite_Initialize(&UartLiteInst, XPAR_AXI_UARTLITE_0_DEVICE_ID);
@@ -36,18 +83,18 @@ int main(){
     if (Status != XST_SUCCESS){
         xil_printf("UART self-test failed\n");
     }
-    
+
+
     u8 RxBuffer[BUFFER_SIZE];
     int rxCount, rxBytes;
 
     while(1){
-
         /* Initialize RxBuffer */
         rxCount = 0;
         RxBuffer[0] = 0x00;
 
-        // infinite loop that continually receives from the UART one byte at a time 
-	// until a carriage return byte (0x0D) is received
+        // infinite loop that continually receives from the UART one byte 
+        // at a time until a carriage return byte (0x0D) is received
         while(1){
             rxBytes = XUartLite_Recv(&UartLiteInst, &RxBuffer[rxCount], 1);
             if ((rxBytes != 0) && (RxBuffer[rxCount] == 0x0D)){
@@ -56,53 +103,43 @@ int main(){
             rxCount += rxBytes;
         }
 
-        /* 
-        xil_printf("\nBytes received: %d\n", rxCount);
-        xil_printf("Bytes received in hex: 0x");
-        for (rxBytes=0; rxBytes<rxCount; rxBytes++){
-            xil_printf("%02X", RxBuffer[rxBytes]);
-        }
-        xil_printf("\nBytes received in string: ");
-        for (rxBytes=0; rxBytes<rxCount; rxBytes++){
-            xil_printf("%c", RxBuffer[rxBytes]);
-        }
-            xil_printf("\n"); 
-        */
-
-        // initialize seed and length
+        // Initialize seed and length
         u8 seed = RxBuffer[0];
         u8 length = RxBuffer[1];
 
-        // write data to data registers
+
+        // Write data to data registers
         u32 data[7] = {0,0,0,0,0,0,0};
-        int count = 0;
+        int count = 3;
         int X = 0;
 
-        for(i=0; i < rxCount; i++){
-            data[X] += RxBuffer[i+2] << 8;
-            count += 1;
-            if (count==4){
-                xil_printf(data[i])
-                Xil_Out32(XPAR_CUSTOMCRC_0_S00_AXI_BASEADDR + (X+2)*4, data[X]);
-                X+=1;
+        for(int i=0; i < rxCount - 2; i++){
+        	data[X] += (RxBuffer[i+2] << 8*count);
+            count--;
+            Xil_Out32(XPAR_CUSTOMCRC_0_S00_AXI_BASEADDR + (X+2)*4, data[X]);
+            if (count<0){
+            	X+=1;
+            	count=3;
             }
         }
-        
-        // set to COMPUTE state (control and status register --> enable=1, seed, length)
-        u32 control_and_status = (control_and_status << 16) + (length << 8) + (seed << 8) + 0x01;
-        xil_printf(control_and_status);
+
+
+        // Set CRC IP to COMPUTE State
+        u32 control_and_status = (0xFF << 24) + (length << 16) + (seed << 8) + 0x01;
         Xil_Out32(XPAR_CUSTOMCRC_0_S00_AXI_BASEADDR, control_and_status);
 
-        
-        // read control and status register if DONE 
-        u32 regVal;
-        regVal = Xil_In32(XPAR_CUSTOMCRC_0_S00_AXI_BASEADDR + 4);    
-        xil_printf("CRC register: %d",  regVal);
+        // Read CRC register
+        u16 CRC = Xil_In32(XPAR_CUSTOMCRC_0_S00_AXI_BASEADDR + 4);
+        xil_printf("CRC: 0x%x\n",  CRC);
 
+        //Reset DATA registers
+        int j=0;
+        for(j = 0; j < 8; j++){
+        	Xil_Out32(XPAR_CUSTOMCRC_0_S00_AXI_BASEADDR + (j+2)*4, 0x0);
+        }
 
-        // set CRC to IDLE state
+        //Reset Control and Status Register to IDLE State
         Xil_Out32(XPAR_CUSTOMCRC_0_S00_AXI_BASEADDR, 0x0);
-        
     }
 
     cleanup_platform();
